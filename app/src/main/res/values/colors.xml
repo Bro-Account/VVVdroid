@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches Material3's light surface so the window and Compose agree
+         before the first frame (and behind translucent lists). -->
+    <color name="window_background">#FFFBFE</color>
+</resources>
