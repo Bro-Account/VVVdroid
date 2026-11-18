@@ -4,6 +4,10 @@ Read-only Android viewer for VVV 2.0 catalogs (`.vvv`, Firebird 5 ODS 13),
 companion to the desktop app
 [eVVVolved](https://github.com/Bro-Account/eVVVolved).
 
+<p align="center">
+  <img src="docs/screenshot.jpg" alt="VVVdroid browsing a catalog volume" width="320">
+</p>
+
 - Opens the catalog files in place, wherever they are stored (e.g. in a
   synced folder) — multi-GB catalogs are never copied into app storage
   unless you ask for a copy.

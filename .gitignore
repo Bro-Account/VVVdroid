@@ -24,6 +24,10 @@ scripts/fbkit/
 *.apk
 Screenshot_*
 
+# ...except images that belong to the docs
+!docs/*.jpg
+!docs/*.png
+
 # Local test data: real catalog excerpts, never published
 test/
 
