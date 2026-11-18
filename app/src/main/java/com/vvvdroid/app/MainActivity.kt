@@ -496,157 +496,235 @@ private fun App(
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
     ) {
-        if (crumbs.isEmpty()) {
-            if (handle == null) {
-                Column(
-                    modifier = Modifier.fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        "VVVdroid " + try {
-                            activity.packageManager
-                                .getPackageInfo(activity.packageName, 0).versionName
-                        } catch (_: Exception) { "" },
-                        fontSize = 24.sp, fontWeight = FontWeight.Bold,
-                    )
-
-                    if (!hasAllFiles) {
-                        Button(onClick = {
-                            if (!requestStorageAccess(activity)) {
-                                status = "Could not open the settings screen. Grant access " +
-                                        "manually: Settings → search \"All files access\"."
-                            }
-                        }) { Text("Grant storage access (All files)") }
-                        Text(
-                            "Catalog files are opened directly where they are stored. " +
-                                    "\"All files access\" lets the app read them in place; " +
-                                    "read-only catalogs are never modified. A read-write " +
-                                    "catalog is opened as a private copy by default."
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = dbPath,
-                        onValueChange = { dbPath = it },
-                        label = { Text("Catalog file (.vvv)") },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = {
-                            pickCatalog.launch(arrayOf("*/*"))
-                        }) { Text("Pick…") }
-
-                        Button(
-                            enabled = hasAllFiles && dbPath.isNotBlank() && !copying,
-                            onClick = { startOpen(dbPath.trim(), MainActivity.MODE_AUTO) },
-                        ) { Text("Open") }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            enabled = dbPath.isNotBlank() && !copying,
-                            onClick = { beginCopy(dbPath.trim()) },
-                        ) { Text("Copy to app storage") }
-                    }
-
-                    if (copying) {
-                        LinearProgressIndicator(
-                            progress = { copyPercent / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    Text(status)
-                }
-            } else if (searchOpen) {
-                Column(
-                    modifier = Modifier.fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { closeSearch() }) { Text("← Back") }
-                        Spacer(Modifier.weight(1f))
-                        if (!searchLoading && searchQuery != null) {
-                            Text("${searchHits.size} matches", fontSize = 12.sp)
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // Surface provides LocalContentColor (onBackground), so plain Text
+        // picks a readable colour in both light and dark themes.
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            if (crumbs.isEmpty()) {
+                if (handle == null) {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        OutlinedTextField(
-                            value = searchText,
-                            onValueChange = { searchText = it },
-                            label = { Text("File name contains") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = { runSearch() }),
-                            modifier = Modifier.weight(1f),
+                        Text(
+                            "VVVdroid " + try {
+                                activity.packageManager
+                                    .getPackageInfo(activity.packageName, 0).versionName
+                            } catch (_: Exception) { "" },
+                            fontSize = 24.sp, fontWeight = FontWeight.Bold,
                         )
-                        Button(
-                            enabled = searchText.isNotBlank() && !searchLoading,
-                            onClick = { runSearch() },
-                        ) { Text("Search") }
-                    }
 
-                    val term = searchQuery
-                    when {
-                        term == null -> Text(
-                            "Searches file names in all volumes of the catalog.",
-                            fontSize = 13.sp,
-                        )
-                        searchLoading -> LinearProgressIndicator(
+                        if (!hasAllFiles) {
+                            Button(onClick = {
+                                if (!requestStorageAccess(activity)) {
+                                    status = "Could not open the settings screen. Grant access " +
+                                            "manually: Settings → search \"All files access\"."
+                                }
+                            }) { Text("Grant storage access (All files)") }
+                            Text(
+                                "Catalog files are opened directly where they are stored. " +
+                                        "\"All files access\" lets the app read them in place; " +
+                                        "read-only catalogs are never modified. A read-write " +
+                                        "catalog is opened as a private copy by default."
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = dbPath,
+                            onValueChange = { dbPath = it },
+                            label = { Text("Catalog file (.vvv)") },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        searchHits.isEmpty() -> Text(
-                            "No file name contains \"$term\" in any volume.",
-                        )
-                        else -> {
-                            if (searchHits.size >= SEARCH_LIMIT) {
-                                Text(
-                                    "First $SEARCH_LIMIT matches across all volumes.",
-                                    fontSize = 12.sp,
-                                )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = {
+                                pickCatalog.launch(arrayOf("*/*"))
+                            }) { Text("Pick…") }
+
+                            Button(
+                                enabled = hasAllFiles && dbPath.isNotBlank() && !copying,
+                                onClick = { startOpen(dbPath.trim(), MainActivity.MODE_AUTO) },
+                            ) { Text("Open") }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                enabled = dbPath.isNotBlank() && !copying,
+                                onClick = { beginCopy(dbPath.trim()) },
+                            ) { Text("Copy to app storage") }
+                        }
+
+                        if (copying) {
+                            LinearProgressIndicator(
+                                progress = { copyPercent / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+
+                        Text(status)
+                    }
+                } else if (searchOpen) {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { closeSearch() }) { Text("← Back") }
+                            Spacer(Modifier.weight(1f))
+                            if (!searchLoading && searchQuery != null) {
+                                Text("${searchHits.size} matches", fontSize = 12.sp)
                             }
-                            LazyColumn(
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = searchText,
+                                onValueChange = { searchText = it },
+                                label = { Text("File name contains") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { runSearch() }),
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                items(searchHits, key = { it.id }) { hit ->
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth()
-                                            .clickable { searchHitInfo = hit },
-                                    ) {
-                                        Column(Modifier.padding(12.dp)) {
-                                            Text(
-                                                "📄  " + hit.name,
-                                                fontWeight = FontWeight.SemiBold,
-                                            )
-                                            Text(
-                                                buildString {
-                                                    append(hit.volumeName.ifBlank { "volume" })
-                                                    if (hit.folderPath.isNotBlank()) {
-                                                        append(" / " + hit.folderPath)
+                            )
+                            Button(
+                                enabled = searchText.isNotBlank() && !searchLoading,
+                                onClick = { runSearch() },
+                            ) { Text("Search") }
+                        }
+
+                        val term = searchQuery
+                        when {
+                            term == null -> Text(
+                                "Searches file names in all volumes of the catalog.",
+                                fontSize = 13.sp,
+                            )
+                            searchLoading -> LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            searchHits.isEmpty() -> Text(
+                                "No file name contains \"$term\" in any volume.",
+                            )
+                            else -> {
+                                if (searchHits.size >= SEARCH_LIMIT) {
+                                    Text(
+                                        "First $SEARCH_LIMIT matches across all volumes.",
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    items(searchHits, key = { it.id }) { hit ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth()
+                                                .clickable { searchHitInfo = hit },
+                                        ) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Text(
+                                                    "📄  " + hit.name,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                )
+                                                Text(
+                                                    buildString {
+                                                        append(hit.volumeName.ifBlank { "volume" })
+                                                        if (hit.folderPath.isNotBlank()) {
+                                                            append(" / " + hit.folderPath)
+                                                        }
+                                                    },
+                                                    fontSize = 12.sp,
+                                                )
+                                                val meta = buildString {
+                                                    hit.size?.let { append(formatSize(it)) }
+                                                    hit.date?.takeIf { it.isNotBlank() }?.let {
+                                                        if (isNotEmpty()) append(" · ")
+                                                        append(it)
                                                     }
-                                                },
-                                                fontSize = 12.sp,
-                                            )
-                                            val meta = buildString {
-                                                hit.size?.let { append(formatSize(it)) }
-                                                hit.date?.takeIf { it.isNotBlank() }?.let {
-                                                    if (isNotEmpty()) append(" · ")
-                                                    append(it)
+                                                }
+                                                if (meta.isNotEmpty()) {
+                                                    Text(meta, fontSize = 12.sp)
                                                 }
                                             }
-                                            if (meta.isNotEmpty()) {
-                                                Text(meta, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Volumes", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    File(dbPath).name,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            TextButton(onClick = { searchOpen = true }) { Text("Search") }
+                            TextButton(onClick = {
+                                val removed = closeOpen()
+                                status = if (removed) "Catalog closed — private copy deleted."
+                                else "Catalog closed."
+                            }) { Text("Close") }
+                        }
+
+                        Text(
+                            status,
+                            fontSize = 12.sp,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+
+                        if (volumes.isEmpty()) {
+                            Text("This catalog has no volumes.")
+                        }
+
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(volumes) { v ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        val h = handle ?: return@clickable
+                                        try {
+                                            val rootId = CatalogDb.rootPathId(h, v.id)
+                                            crumbs = listOf(Crumb.Volume(v.id, rootId, v.name))
+                                        } catch (e: Throwable) {
+                                            status = "Cannot open volume: ${e.message}"
+                                        }
+                                    }
+                                ) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(v.name, fontWeight = FontWeight.Bold)
+                                        v.physicalPath?.let { Text(it, fontSize = 13.sp) }
+                                        val meta = buildString {
+                                            v.catalogDate?.let { append("cataloged $it") }
+                                            if (!v.lastUpdateDate.isNullOrBlank()) {
+                                                if (isNotEmpty()) append(" · ")
+                                                append("updated " + v.lastUpdateDate)
                                             }
+                                        }
+                                        if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
+                                        v.description?.takeIf { it.isNotBlank() }?.let {
+                                            Text(it, fontSize = 12.sp)
                                         }
                                     }
                                 }
@@ -662,236 +740,165 @@ private fun App(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Volumes", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                            Text(
-                                File(dbPath).name,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        TextButton(onClick = { searchOpen = true }) { Text("Search") }
-                        TextButton(onClick = {
-                            val removed = closeOpen()
-                            status = if (removed) "Catalog closed — private copy deleted."
-                            else "Catalog closed."
-                        }) { Text("Close") }
+                        TextButton(onClick = { crumbs = crumbs.dropLast(1) }) { Text("← Up") }
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "${entries.count { it.isFolder }} folders · " +
+                                    "${entries.count { !it.isFolder }} files",
+                            fontSize = 12.sp,
+                        )
                     }
 
                     Text(
-                        status,
-                        fontSize = 12.sp,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
+                        crumbs.last().title,
+                        fontSize = 22.sp, fontWeight = FontWeight.Bold,
                     )
+                    if (crumbs.size > 1) {
+                        Text(
+                            crumbs.dropLast(1).joinToString(" / ") { it.title },
+                            fontSize = 12.sp,
+                        )
+                    }
 
-                    if (volumes.isEmpty()) {
-                        Text("This catalog has no volumes.")
+                    if (entriesLoading) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else if (entries.isEmpty()) {
+                        Text("This folder is empty.")
                     }
 
                     LazyColumn(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        items(volumes) { v ->
+                        items(entries) { e ->
                             Card(
                                 modifier = Modifier.fillMaxWidth().clickable {
-                                    val h = handle ?: return@clickable
-                                    try {
-                                        val rootId = CatalogDb.rootPathId(h, v.id)
-                                        crumbs = listOf(Crumb.Volume(v.id, rootId, v.name))
-                                    } catch (e: Throwable) {
-                                        status = "Cannot open volume: ${e.message}"
+                                    if (e.isFolder) {
+                                        val volumeId = when (val c = crumbs.last()) {
+                                            is Crumb.Volume -> c.id
+                                            is Crumb.Folder -> c.volumeId
+                                        }
+                                        crumbs = crumbs + Crumb.Folder(volumeId, e.id, e.name)
+                                    } else {
+                                        fileInfo = e
                                     }
                                 }
                             ) {
                                 Column(Modifier.padding(12.dp)) {
-                                    Text(v.name, fontWeight = FontWeight.Bold)
-                                    v.physicalPath?.let { Text(it, fontSize = 13.sp) }
+                                    Text(
+                                        (if (e.isFolder) "📁  " else "📄  ") + e.name,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
                                     val meta = buildString {
-                                        v.catalogDate?.let { append("cataloged $it") }
-                                        if (!v.lastUpdateDate.isNullOrBlank()) {
-                                            if (isNotEmpty()) append(" · ")
-                                            append("updated " + v.lastUpdateDate)
+                                        if (e.isFolder) {
+                                            append("folder")
+                                        } else {
+                                            e.size?.let { append(formatSize(it)) }
+                                            e.date?.takeIf { it.isNotBlank() }?.let {
+                                                if (isNotEmpty()) append(" · ")
+                                                append(it)
+                                            }
                                         }
                                     }
                                     if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
-                                    v.description?.takeIf { it.isNotBlank() }?.let {
-                                        Text(it, fontSize = 12.sp)
-                                    }
                                 }
                             }
                         }
                     }
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { crumbs = crumbs.dropLast(1) }) { Text("← Up") }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        "${entries.count { it.isFolder }} folders · " +
-                                "${entries.count { !it.isFolder }} files",
-                        fontSize = 12.sp,
-                    )
-                }
 
-                Text(
-                    crumbs.last().title,
-                    fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                )
-                if (crumbs.size > 1) {
-                    Text(
-                        crumbs.dropLast(1).joinToString(" / ") { it.title },
-                        fontSize = 12.sp,
-                    )
-                }
-
-                if (entriesLoading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                } else if (entries.isEmpty()) {
-                    Text("This folder is empty.")
-                }
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(entries) { e ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                if (e.isFolder) {
-                                    val volumeId = when (val c = crumbs.last()) {
-                                        is Crumb.Volume -> c.id
-                                        is Crumb.Folder -> c.volumeId
-                                    }
-                                    crumbs = crumbs + Crumb.Folder(volumeId, e.id, e.name)
-                                } else {
-                                    fileInfo = e
-                                }
-                            }
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(
-                                    (if (e.isFolder) "📁  " else "📄  ") + e.name,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                val meta = buildString {
-                                    if (e.isFolder) {
-                                        append("folder")
-                                    } else {
-                                        e.size?.let { append(formatSize(it)) }
-                                        e.date?.takeIf { it.isNotBlank() }?.let {
-                                            if (isNotEmpty()) append(" · ")
-                                            append(it)
-                                        }
-                                    }
-                                }
-                                if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-
-                TextButton(onClick = {
-                    val removed = closeOpen()
-                    status = if (removed) "Catalog closed — private copy deleted."
-                    else "Catalog closed."
-                }) { Text("Close catalog") }
-            }
-        }
-
-        val promptPath = rwPromptPath
-        if (promptPath != null) {
-            val size = File(promptPath).length()
-            AlertDialog(
-                onDismissRequest = {
-                    rwPromptPath = null
-                    status = "Open cancelled."
-                },
-                title = { Text("Catalog is read-write") },
-                text = {
-                    Text(
-                        "This catalog does not carry the read-only flag. Opening it " +
-                                "in place lets Firebird update the header and " +
-                                "transaction bookkeeping, which changes the file and " +
-                                "triggers a full re-sync.\n\n" +
-                                "A private copy stays in app storage and leaves the " +
-                                "original untouched (${formatSize(size)} to copy). It " +
-                                "is deleted when you close the catalog."
-                    )
-                },
-                confirmButton = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            rwPromptPath = null
-                            openInPlace(promptPath, privateCopy = false)
-                        }) { Text("Open in place anyway") }
-                        Button(onClick = {
-                            rwPromptPath = null
-                            beginCopy(promptPath)
-                        }) { Text("Copy & open") }
-                    }
-                },
-                dismissButton = {
                     TextButton(onClick = {
+                        val removed = closeOpen()
+                        status = if (removed) "Catalog closed — private copy deleted."
+                        else "Catalog closed."
+                    }) { Text("Close catalog") }
+                }
+            }
+
+            val promptPath = rwPromptPath
+            if (promptPath != null) {
+                val size = File(promptPath).length()
+                AlertDialog(
+                    onDismissRequest = {
                         rwPromptPath = null
                         status = "Open cancelled."
-                    }) { Text("Cancel") }
-                },
-            )
-        }
-
-        searchHitInfo?.let { f ->
-            AlertDialog(
-                onDismissRequest = { searchHitInfo = null },
-                title = { Text(f.name) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        f.size?.let { Text("Size: ${formatSize(it)}") }
-                        f.date?.takeIf { it.isNotBlank() }?.let { Text("Modified: $it") }
-                        f.ext?.let { Text("Extension: $it") }
+                    },
+                    title = { Text("Catalog is read-write") },
+                    text = {
                         Text(
-                            "Path: " + listOf(f.volumeName, f.folderPath)
-                                .filter { it.isNotBlank() }
-                                .joinToString(" / ") + " / " + f.name,
-                            fontSize = 12.sp,
+                            "This catalog does not carry the read-only flag. Opening it " +
+                                    "in place lets Firebird update the header and " +
+                                    "transaction bookkeeping, which changes the file and " +
+                                    "triggers a full re-sync.\n\n" +
+                                    "A private copy stays in app storage and leaves the " +
+                                    "original untouched (${formatSize(size)} to copy). It " +
+                                    "is deleted when you close the catalog."
                         )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { searchHitInfo = null }) { Text("Close") }
-                },
-            )
-        }
+                    },
+                    confirmButton = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                rwPromptPath = null
+                                openInPlace(promptPath, privateCopy = false)
+                            }) { Text("Open in place anyway") }
+                            Button(onClick = {
+                                rwPromptPath = null
+                                beginCopy(promptPath)
+                            }) { Text("Copy & open") }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            rwPromptPath = null
+                            status = "Open cancelled."
+                        }) { Text("Cancel") }
+                    },
+                )
+            }
 
-        fileInfo?.let { f ->
-            AlertDialog(
-                onDismissRequest = { fileInfo = null },
-                title = { Text(f.name) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        f.size?.let { Text("Size: ${formatSize(it)}") }
-                        f.date?.takeIf { it.isNotBlank() }?.let { Text("Modified: $it") }
-                        f.ext?.let { Text("Extension: $it") }
-                        Text(
-                            "Path: " + crumbs.joinToString(" / ") { it.title } +
-                                    " / " + f.name,
-                            fontSize = 12.sp,
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { fileInfo = null }) { Text("Close") }
-                },
-            )
+            searchHitInfo?.let { f ->
+                AlertDialog(
+                    onDismissRequest = { searchHitInfo = null },
+                    title = { Text(f.name) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            f.size?.let { Text("Size: ${formatSize(it)}") }
+                            f.date?.takeIf { it.isNotBlank() }?.let { Text("Modified: $it") }
+                            f.ext?.let { Text("Extension: $it") }
+                            Text(
+                                "Path: " + listOf(f.volumeName, f.folderPath)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" / ") + " / " + f.name,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { searchHitInfo = null }) { Text("Close") }
+                    },
+                )
+            }
+
+            fileInfo?.let { f ->
+                AlertDialog(
+                    onDismissRequest = { fileInfo = null },
+                    title = { Text(f.name) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            f.size?.let { Text("Size: ${formatSize(it)}") }
+                            f.date?.takeIf { it.isNotBlank() }?.let { Text("Modified: $it") }
+                            f.ext?.let { Text("Extension: $it") }
+                            Text(
+                                "Path: " + crumbs.joinToString(" / ") { it.title } +
+                                        " / " + f.name,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { fileInfo = null }) { Text("Close") }
+                    },
+                )
+            }
         }
     }
 }
