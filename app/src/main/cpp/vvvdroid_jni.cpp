@@ -5,10 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
-#include <sys/file.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -425,57 +423,6 @@ Java_com_vvvdroid_app_CatalogDb_closeCatalog(JNIEnv* env, jclass, jlong jHandle)
     if (h->tr != 0) isc_rollback_transaction(status, &h->tr);
     if (h->db != 0) isc_detach_database(status, &h->db);
     delete h;
-}
-
-// ---------------------------------------------------------------------------
-// probeFileLock(path) -> diagnostics string. Tries the operations the engine
-// performs on a database file (open, fcntl lock, flock, pread, mmap) and
-// reports which ones the filesystem supports. Shared storage (FUSE) on
-// Android typically rejects the locking calls, which makes attach fail with
-// "I/O error ... lock ... Function not implemented".
-// ---------------------------------------------------------------------------
-JNIEXPORT jstring JNICALL
-Java_com_vvvdroid_app_CatalogDb_probeFileLock(JNIEnv* env, jclass, jstring jPath) {
-    const char* path = env->GetStringUTFChars(jPath, nullptr);
-
-    std::string result;
-    int fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        result = std::string("open: ") + strerror(errno);
-        env->ReleaseStringUTFChars(jPath, path);
-        return env->NewStringUTF(result.c_str());
-    }
-
-    struct flock lck;
-    memset(&lck, 0, sizeof(lck));
-    lck.l_type = F_RDLCK;
-    lck.l_whence = SEEK_SET;
-    lck.l_start = 0;
-    lck.l_len = 4096;
-    if (fcntl(fd, F_SETLK, &lck) == 0) result += "fcntl=OK";
-    else result += std::string("fcntl=") + strerror(errno);
-    lck.l_type = F_UNLCK;
-    fcntl(fd, F_SETLK, &lck);
-
-    if (flock(fd, LOCK_SH | LOCK_NB) == 0) result += " flock=OK";
-    else result += std::string(" flock=") + strerror(errno);
-    flock(fd, LOCK_UN);
-
-    char buf[16];
-    if (pread(fd, buf, sizeof(buf), 0) >= 0) result += " pread=OK";
-    else result += std::string(" pread=") + strerror(errno);
-
-    void* m = mmap(nullptr, 4096, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (m != MAP_FAILED) {
-        result += " mmap=OK";
-        munmap(m, 4096);
-    } else {
-        result += std::string(" mmap=") + strerror(errno);
-    }
-
-    close(fd);
-    env->ReleaseStringUTFChars(jPath, path);
-    return env->NewStringUTF(result.c_str());
 }
 
 } // extern "C"

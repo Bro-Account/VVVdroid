@@ -473,55 +473,6 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        val p = dbPath.trim()
-                        if (p.isBlank()) {
-                            status = "Select a catalog path first."
-                            return@OutlinedButton
-                        }
-                        val probe = StringBuilder()
-                        probe.append("Header — ")
-                        val h = try { CatalogDb.header(p) } catch (_: Throwable) { null }
-                        if (h == null) {
-                            probe.append("not a Firebird database")
-                        } else {
-                            probe.append(h.format)
-                            probe.append(", page size ").append(h.pageSize)
-                            probe.append(", flags 0x").append("%02x".format(h.flags))
-                            probe.append(if (h.readOnly) ", read-only" else ", read-write")
-                        }
-                        probe.append("  |  Shared storage — ").append(CatalogDb.probeFileLock(p))
-                        val tmp = File(activity.filesDir, "probe.tmp")
-                        tmp.writeText("0123456789abcdef0123456789abcdef")
-                        probe.append("  |  App storage — ").append(CatalogDb.probeFileLock(tmp.absolutePath))
-                        tmp.delete()
-                        // report whether the installed engine libraries carry the
-                        // flock no-op patch (offsets differ per ABI)
-                        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-                        val patches = if (abi.startsWith("x86_64")) listOf(
-                            Triple("libfbclient.so", 0x353140L, "31c0c3"),
-                            Triple("libEngine13.so", 0xb8d8e0L, "31c0c3"),
-                        ) else listOf(
-                            Triple("libfbclient.so", 0x34b080L, "00008052c0035fd6"),
-                            Triple("libEngine13.so", 0xaf4dc0L, "00008052c0035fd6"),
-                        )
-                        for ((name, offset, expected) in patches) {
-                            val lib = File(activity.applicationInfo.nativeLibraryDir, name)
-                            if (lib.exists()) {
-                                java.io.RandomAccessFile(lib, "r").use { raf ->
-                                    raf.seek(offset)
-                                    val b = ByteArray(expected.length / 2)
-                                    raf.readFully(b)
-                                    val hex = b.joinToString("") { "%02x".format(it) }
-                                    probe.append("  |  ").append(name).append(" (").append(abi)
-                                        .append("): ")
-                                        .append(if (hex == expected) "patched" else "NOT patched ($hex)")
-                                }
-                            }
-                        }
-                        status = probe.toString()
-                    }) { Text("Diagnose") }
-
                     OutlinedButton(
                         enabled = dbPath.isNotBlank() && !copying,
                         onClick = { beginCopy(dbPath.trim()) },

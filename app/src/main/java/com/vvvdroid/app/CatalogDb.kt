@@ -82,13 +82,6 @@ object CatalogDb {
         return HeaderInfo(flags = v[1], pageSize = v[2], odsMajor = v[3], odsMinor = v[4])
     }
 
-    /**
-     * Probe which file operations the filesystem behind [path] supports.
-     * Used to find out whether shared storage (FUSE) accepts the file
-     * locking calls the engine needs. Returns a short diagnostic string.
-     */
-    external fun probeFileLock(path: String): String
-
     fun volumes(handle: Long): List<Volume> =
         listVolumes(handle).map { row ->
             Volume(
