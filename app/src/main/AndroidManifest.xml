@@ -13,7 +13,8 @@
         android:label="VVVdroid"
         android:icon="@android:drawable/sym_def_app_icon"
         android:requestLegacyExternalStorage="true"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VVVdroid">
 
         <!-- Configuration changes are handled by the activity: recreating it
              would drop the live Firebird attachment (and interrupt a catalog
@@ -21,7 +22,8 @@
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

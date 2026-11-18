@@ -15,6 +15,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,6 +47,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         // A cold start may find a private copy left behind by a killed process;
         // closing a catalog deletes it, this catches the unclean exit.
         // A private catalog copy can only outlive the UI state through an
@@ -235,6 +239,9 @@ private fun App(
     var searchLoading by remember { mutableStateOf(false) }
     var searchHitInfo by remember { mutableStateOf<CatalogDb.SearchHit?>(null) }
 
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+
     // Re-check the permission whenever the app comes back to the foreground:
     // the Settings screens are launched with plain startActivity (no result),
     // so returning from them only surfaces as an ON_RESUME here.
@@ -279,6 +286,10 @@ private fun App(
     }
 
     fun closeSearch() {
+        // Drop focus and the keyboard before the field leaves the screen: a
+        // still-focused field plus a closing IME can leave the window panned.
+        focusManager.clearFocus()
+        keyboard?.hide()
         searchOpen = false
         searchQuery = null
         searchHits = emptyList()

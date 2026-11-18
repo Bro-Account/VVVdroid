@@ -12,8 +12,8 @@ android {
         applicationId = "com.vvvdroid.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.5.1"
+        versionCode = 10
+        versionName = "0.5.2"
 
         ndk {
             // matches the ABIs we link libfbclient.so for; the AAR ships all four

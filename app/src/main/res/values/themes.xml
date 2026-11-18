@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws the whole UI. The platform action bar only steals vertical
+         space, and its default soft-input handling pans the window (the pan can
+         survive the keyboard closing). Hence NoActionBar + adjustResize. -->
+    <style name="Theme.VVVdroid" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
