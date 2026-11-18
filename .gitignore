@@ -1,0 +1,34 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# Provisioned dependencies (fetch via scripts/)
+app/libs/
+
+# Native build output
+.cxx/
+
+# Transient downloads (Firebird kits)
+scripts/downloads/
+scripts/fbkit/
+
+# Local test artifacts (screenshots etc.)
+*.jpg
+*.png
+*.apk
+Screenshot_*
+
+# Local test data: real catalog excerpts, never published
+test/
+
+# Catalog files are data, never source
+*.vvv
+
+# Kotlin build cache
+.kotlin/

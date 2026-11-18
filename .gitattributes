@@ -1,0 +1,7 @@
+# Keep shell scripts LF so they run on Linux/macOS and in the Gradle wrapper;
+# Windows scripts stay CRLF.
+* text=auto
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+gradlew text eol=lf
+*.sh text eol=lf
