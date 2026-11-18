@@ -20,12 +20,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -222,8 +226,10 @@ private fun App(
     var entriesLoading by remember { mutableStateOf(false) }
     var fileInfo by remember { mutableStateOf<CatalogDb.Entry?>(null) }
 
-    // search state: [searchQuery] is the term whose results are on screen
+    // search state: [searchOpen] shows the search screen, [searchQuery] is the
+    // term whose results are on screen
     var searchText by remember { mutableStateOf("") }
+    var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf<String?>(null) }
     var searchHits by remember { mutableStateOf<List<CatalogDb.SearchHit>>(emptyList()) }
     var searchLoading by remember { mutableStateOf(false) }
@@ -266,9 +272,22 @@ private fun App(
         crumbs = emptyList()
         entries = emptyList()
         fileInfo = null
+        searchOpen = false
         searchQuery = null
         searchHits = emptyList()
         searchHitInfo = null
+    }
+
+    fun closeSearch() {
+        searchOpen = false
+        searchQuery = null
+        searchHits = emptyList()
+        searchText = ""
+    }
+
+    fun runSearch() {
+        val term = searchText.trim()
+        if (term.isNotEmpty()) searchQuery = term
     }
 
     /** Closes the catalog; a private copy is deleted. Returns true if removed. */
@@ -405,6 +424,7 @@ private fun App(
             startOpen(autoPath, autoMode)
             if (!autoSearch.isNullOrBlank()) {
                 searchText = autoSearch
+                searchOpen = true
                 searchQuery = autoSearch
             }
         }
@@ -456,85 +476,92 @@ private fun App(
         if (found != null) searchHits = found
     }
 
-    BackHandler(enabled = crumbs.isNotEmpty() || searchQuery != null) {
+    BackHandler(enabled = crumbs.isNotEmpty() || searchOpen) {
         if (crumbs.isNotEmpty()) crumbs = crumbs.dropLast(1)
-        else searchQuery = null
+        else closeSearch()
     }
 
     MaterialTheme {
         if (crumbs.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    "VVVdroid " + try {
-                        activity.packageManager
-                            .getPackageInfo(activity.packageName, 0).versionName
-                    } catch (_: Exception) { "" },
-                    fontSize = 24.sp, fontWeight = FontWeight.Bold,
-                )
-
-                if (!hasAllFiles) {
-                    Button(onClick = {
-                        if (!requestStorageAccess(activity)) {
-                            status = "Could not open the settings screen. Grant access " +
-                                    "manually: Settings → search \"All files access\"."
-                        }
-                    }) { Text("Grant storage access (All files)") }
+            if (handle == null) {
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Text(
-                        "Catalog files are opened directly where they are stored. " +
-                                "\"All files access\" lets the app read them in place; " +
-                                "read-only catalogs are never modified. A read-write " +
-                                "catalog is opened as a private copy by default."
+                        "VVVdroid " + try {
+                            activity.packageManager
+                                .getPackageInfo(activity.packageName, 0).versionName
+                        } catch (_: Exception) { "" },
+                        fontSize = 24.sp, fontWeight = FontWeight.Bold,
                     )
-                }
 
-                OutlinedTextField(
-                    value = dbPath,
-                    onValueChange = { dbPath = it },
-                    label = { Text("Catalog file (.vvv)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        pickCatalog.launch(arrayOf("*/*"))
-                    }) { Text("Pick…") }
-
-                    Button(
-                        enabled = hasAllFiles && dbPath.isNotBlank() && handle == null && !copying,
-                        onClick = { startOpen(dbPath.trim(), MainActivity.MODE_AUTO) },
-                    ) { Text("Open") }
-
-                    if (handle != null) {
+                    if (!hasAllFiles) {
                         Button(onClick = {
-                            val removed = closeOpen()
-                            status = if (removed) "Catalog closed — private copy deleted."
-                            else "Catalog closed."
-                        }) { Text("Close") }
+                            if (!requestStorageAccess(activity)) {
+                                status = "Could not open the settings screen. Grant access " +
+                                        "manually: Settings → search \"All files access\"."
+                            }
+                        }) { Text("Grant storage access (All files)") }
+                        Text(
+                            "Catalog files are opened directly where they are stored. " +
+                                    "\"All files access\" lets the app read them in place; " +
+                                    "read-only catalogs are never modified. A read-write " +
+                                    "catalog is opened as a private copy by default."
+                        )
                     }
-                }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        enabled = dbPath.isNotBlank() && !copying,
-                        onClick = { beginCopy(dbPath.trim()) },
-                    ) { Text("Copy to app storage") }
-                }
-
-                if (copying) {
-                    LinearProgressIndicator(
-                        progress = { copyPercent / 100f },
+                    OutlinedTextField(
+                        value = dbPath,
+                        onValueChange = { dbPath = it },
+                        label = { Text("Catalog file (.vvv)") },
                         modifier = Modifier.fillMaxWidth(),
                     )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            pickCatalog.launch(arrayOf("*/*"))
+                        }) { Text("Pick…") }
+
+                        Button(
+                            enabled = hasAllFiles && dbPath.isNotBlank() && !copying,
+                            onClick = { startOpen(dbPath.trim(), MainActivity.MODE_AUTO) },
+                        ) { Text("Open") }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            enabled = dbPath.isNotBlank() && !copying,
+                            onClick = { beginCopy(dbPath.trim()) },
+                        ) { Text("Copy to app storage") }
+                    }
+
+                    if (copying) {
+                        LinearProgressIndicator(
+                            progress = { copyPercent / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    Text(status)
                 }
+            } else if (searchOpen) {
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { closeSearch() }) { Text("← Back") }
+                        Spacer(Modifier.weight(1f))
+                        if (!searchLoading && searchQuery != null) {
+                            Text("${searchHits.size} matches", fontSize = 12.sp)
+                        }
+                    }
 
-                Text(status)
-
-                if (handle != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -542,82 +569,111 @@ private fun App(
                         OutlinedTextField(
                             value = searchText,
                             onValueChange = { searchText = it },
-                            label = { Text("Search file names") },
+                            label = { Text("File name contains") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { runSearch() }),
                             modifier = Modifier.weight(1f),
                         )
                         Button(
                             enabled = searchText.isNotBlank() && !searchLoading,
-                            onClick = { searchQuery = searchText.trim() },
+                            onClick = { runSearch() },
                         ) { Text("Search") }
                     }
-                }
 
-                if (searchQuery != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { searchQuery = null }) { Text("← Back") }
-                        Spacer(Modifier.weight(1f))
-                        if (!searchLoading) {
-                            Text("${searchHits.size} matches", fontSize = 12.sp)
-                        }
-                    }
-                    Text(
-                        "Results for \"$searchQuery\"",
-                        fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                    )
-                    if (searchLoading) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    } else if (searchHits.isEmpty()) {
-                        Text("No file name contains this text in any volume.")
-                    } else {
-                        Text(
-                            if (searchHits.size >= SEARCH_LIMIT)
-                                "All volumes — showing the first $SEARCH_LIMIT matches."
-                            else "All volumes.",
-                            fontSize = 12.sp,
+                    val term = searchQuery
+                    when {
+                        term == null -> Text(
+                            "Searches file names in all volumes of the catalog.",
+                            fontSize = 13.sp,
                         )
-                        LazyColumn(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            items(searchHits, key = { it.id }) { hit ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth()
-                                        .clickable { searchHitInfo = hit },
-                                ) {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text(
-                                            "📄  " + hit.name,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                        Text(
-                                            buildString {
-                                                append(hit.volumeName.ifBlank { "volume" })
-                                                if (hit.folderPath.isNotBlank()) {
-                                                    append(" / " + hit.folderPath)
+                        searchLoading -> LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        searchHits.isEmpty() -> Text(
+                            "No file name contains \"$term\" in any volume.",
+                        )
+                        else -> {
+                            if (searchHits.size >= SEARCH_LIMIT) {
+                                Text(
+                                    "First $SEARCH_LIMIT matches across all volumes.",
+                                    fontSize = 12.sp,
+                                )
+                            }
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                items(searchHits, key = { it.id }) { hit ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .clickable { searchHitInfo = hit },
+                                    ) {
+                                        Column(Modifier.padding(12.dp)) {
+                                            Text(
+                                                "📄  " + hit.name,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                            Text(
+                                                buildString {
+                                                    append(hit.volumeName.ifBlank { "volume" })
+                                                    if (hit.folderPath.isNotBlank()) {
+                                                        append(" / " + hit.folderPath)
+                                                    }
+                                                },
+                                                fontSize = 12.sp,
+                                            )
+                                            val meta = buildString {
+                                                hit.size?.let { append(formatSize(it)) }
+                                                hit.date?.takeIf { it.isNotBlank() }?.let {
+                                                    if (isNotEmpty()) append(" · ")
+                                                    append(it)
                                                 }
-                                            },
-                                            fontSize = 12.sp,
-                                        )
-                                        val meta = buildString {
-                                            hit.size?.let { append(formatSize(it)) }
-                                            hit.date?.takeIf { it.isNotBlank() }?.let {
-                                                if (isNotEmpty()) append(" · ")
-                                                append(it)
+                                            }
+                                            if (meta.isNotEmpty()) {
+                                                Text(meta, fontSize = 12.sp)
                                             }
                                         }
-                                        if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
                                     }
                                 }
                             }
                         }
                     }
-                } else {
-                    if (handle != null) {
-                        Text(
-                            "Tap a volume to browse it.",
-                            fontSize = 12.sp,
-                        )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Volumes", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                File(dbPath).name,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(onClick = { searchOpen = true }) { Text("Search") }
+                        TextButton(onClick = {
+                            val removed = closeOpen()
+                            status = if (removed) "Catalog closed — private copy deleted."
+                            else "Catalog closed."
+                        }) { Text("Close") }
+                    }
+
+                    Text(
+                        status,
+                        fontSize = 12.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    if (volumes.isEmpty()) {
+                        Text("This catalog has no volumes.")
                     }
 
                     LazyColumn(
@@ -630,8 +686,6 @@ private fun App(
                                     val h = handle ?: return@clickable
                                     try {
                                         val rootId = CatalogDb.rootPathId(h, v.id)
-                                        searchQuery = null
-                                        searchText = ""
                                         crumbs = listOf(Crumb.Volume(v.id, rootId, v.name))
                                     } catch (e: Throwable) {
                                         status = "Cannot open volume: ${e.message}"
