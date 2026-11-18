@@ -3,4 +3,6 @@
     <!-- Matches Material3's light surface so the window and Compose agree
          before the first frame (and behind translucent lists). -->
     <color name="window_background">#FFFBFE</color>
+    <!-- Launcher icon background (Material3 primary purple). -->
+    <color name="ic_launcher_background">#6750A4</color>
 </resources>

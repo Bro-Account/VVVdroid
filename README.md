@@ -1,6 +1,7 @@
 # VVVdroid
 
 [![android-build](https://github.com/Bro-Account/VVVdroid/actions/workflows/android.yml/badge.svg)](https://github.com/Bro-Account/VVVdroid/actions/workflows/android.yml)
+[![release](https://github.com/Bro-Account/VVVdroid/actions/workflows/release.yml/badge.svg)](https://github.com/Bro-Account/VVVdroid/actions/workflows/release.yml)
 
 Read-only Android viewer for VVV 2.0 catalogs (`.vvv`, Firebird 5 ODS 13),
 companion to the desktop app
@@ -33,6 +34,15 @@ companion to the desktop app
 - Uses the official Firebird 5 Android build
   (`Firebird-5.0.4.1812-0-android-embedded.aar` from the FirebirdSQL
   releases) via a thin JNI bridge.
+
+## Install
+
+Download `VVVdroid-<version>.apk` from the
+[latest release](https://github.com/Bro-Account/VVVdroid/releases/latest) and
+install it on Android 8.0 or newer. Releases are signed with the project's
+own key; the `.sha256` file next to the APK verifies the download. Debug
+builds from before the first release cannot be updated in place — uninstall
+them once.
 
 ## Status
 
@@ -82,7 +92,11 @@ builds, installs, pushes test catalogs and dumps the UI text — it needs an
 AVD plus roughly 12 GB free disk space and 8 GB RAM (the API 37 image is
 large).
 
-## Licenses
+## License
+
+VVVdroid is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, version 2 (see [`LICENSE`](LICENSE)).
 
 Firebird is bundled under the InterBase Public License / Initial
 Developer's Public License. The full texts ship inside the APK and in this
