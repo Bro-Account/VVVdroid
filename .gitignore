@@ -34,8 +34,8 @@ test/
 # Catalog files are data, never source
 *.vvv
 
-# Local working notes (private; never publish)
-/VVVdroid-NOTES.md
+# Local working material (notes, screenshots, exports); never publish
+/local/
 
 # Release signing material (never publish)
 /keystore/
