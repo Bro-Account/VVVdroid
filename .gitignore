@@ -34,5 +34,8 @@ test/
 # Catalog files are data, never source
 *.vvv
 
+# Local working notes (private; never publish)
+/VVVdroid-NOTES.md
+
 # Kotlin build cache
 .kotlin/
