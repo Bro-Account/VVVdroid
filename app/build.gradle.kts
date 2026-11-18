@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.vvvdroid.app"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.vvvdroid.app"

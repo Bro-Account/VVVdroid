@@ -29,14 +29,28 @@
 [CmdletBinding()]
 param(
     [string]$Version = '5.0.4.1812-0',
-    [string]$SevenZip = "$env:ProgramFiles\7-Zip\7z.exe"
+    [string]$SevenZip = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$LibsDir  = Join-Path $RepoRoot 'app\libs'
+$LibsDir  = Join-Path (Join-Path $RepoRoot 'app') 'libs'
 $Name     = "Firebird-$Version-android-embedded.aar"
 $Url      = "https://github.com/FirebirdSQL/firebird/releases/download/v5.0.4/$Name"
+
+# 7-Zip: the Windows default install path, otherwise whatever `7z` is on PATH
+# (Linux CI/macOS install p7zip from the distro).
+if (-not $SevenZip -and $env:ProgramFiles) {
+    $candidate = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+    if (Test-Path $candidate) { $SevenZip = $candidate }
+}
+if (-not $SevenZip) {
+    $cmd = Get-Command 7z -ErrorAction SilentlyContinue
+    if ($cmd) { $SevenZip = $cmd.Source }
+}
+if (-not $SevenZip -or -not (Test-Path $SevenZip)) {
+    throw "7-Zip not found (install it or pass -SevenZip <path>)"
+}
 
 New-Item -ItemType Directory -Force -Path $LibsDir | Out-Null
 $Target = Join-Path $LibsDir $Name
@@ -155,43 +169,48 @@ function Patch-LibFlock([string]$Path) {
     Write-Host ("Patched flock stub in {0} at file offset 0x{1:x}" -f $Path, $stubOff)
 }
 
-foreach ($abi in @('arm64-v8a', 'x86_64')) {
-    $outDir = Join-Path $LibsDir "fbclient\$abi"
-    $soFile = Join-Path $outDir 'libfbclient.so'
-    $tmpDir = Join-Path $env:TEMP "fb-aar-patch-$abi"
+# The AAR is a zip; 7-Zip both extracts it and writes patched libraries back.
+# Extracting once covers both ABIs (GNU tar cannot read zip archives).
+$tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'fb-aar-patch'
+Remove-Item $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
+Write-Host "Extracting $Name"
+& $SevenZip x -y "-o$tmpRoot" $Target | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Extraction failed: $Target" }
 
-    if (-not (Test-Path $SevenZip)) { throw "7-Zip not found at $SevenZip (pass -SevenZip <path>)" }
+try {
+    foreach ($abi in @('arm64-v8a', 'x86_64')) {
+        $jniDir = Join-Path (Join-Path $tmpRoot 'jni') $abi
+        $outDir = Join-Path (Join-Path $LibsDir 'fbclient') $abi
+        $soFile = Join-Path $outDir 'libfbclient.so'
 
-    # extract all libraries (we cannot rely on any earlier state)
-    Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
-    tar -C $tmpDir -xf $Target "jni/$abi"
-    $jniDir = Join-Path $tmpDir "jni\$abi"
-    if (-not (Test-Path (Join-Path $jniDir 'libfbclient.so'))) {
-        throw "Extraction of jni/$abi failed"
-    }
-
-    # patch every library that imports flock (the engine runs in
-    # libEngine13.so, not only in libfbclient.so)
-    $patched = @()
-    Get-ChildItem $jniDir -Filter '*.so' | ForEach-Object {
-        $relEntry = "jni/$abi/$($_.Name)"
-        Patch-LibFlock $_.FullName
-        Push-Location $tmpDir
-        try {
-            & $SevenZip a $Target $relEntry | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Updating $relEntry in $Target failed" }
-        } finally {
-            Pop-Location
+        if (-not (Test-Path (Join-Path $jniDir 'libfbclient.so'))) {
+            throw "jni/$abi missing from $Name"
         }
-        $patched += $_.Name
-    }
 
-    # copy for CMake linking
-    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-    Copy-Item (Join-Path $jniDir 'libfbclient.so') $soFile -Force
-    Remove-Item $tmpDir -Recurse -Force
-    Write-Host "Updated: $soFile ($($patched.Count) libs patched/skipped-checked)"
+        # patch every library that imports flock (the engine runs in
+        # libEngine13.so, not only in libfbclient.so)
+        $patched = @()
+        Get-ChildItem $jniDir -Filter '*.so' | ForEach-Object {
+            $relEntry = "jni/$abi/$($_.Name)"
+            Patch-LibFlock $_.FullName
+            Push-Location $tmpRoot
+            try {
+                & $SevenZip a $Target $relEntry | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "Updating $relEntry in $Target failed" }
+            } finally {
+                Pop-Location
+            }
+            $patched += $_.Name
+        }
+
+        # copy for CMake linking
+        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+        Copy-Item (Join-Path $jniDir 'libfbclient.so') $soFile -Force
+        Write-Host "Updated: $soFile ($($patched.Count) libs patched/skipped-checked)"
+    }
+} finally {
+    Remove-Item $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host 'Done. Open the project in Android Studio or run gradlew.'

@@ -1,5 +1,7 @@
 # VVVdroid
 
+[![android-build](https://github.com/Bro-Account/VVVdroid/actions/workflows/android.yml/badge.svg)](https://github.com/Bro-Account/VVVdroid/actions/workflows/android.yml)
+
 Read-only Android viewer for VVV 2.0 catalogs (`.vvv`, Firebird 5 ODS 13),
 companion to the desktop app
 [eVVVolved](https://github.com/Bro-Account/eVVVolved).
@@ -56,8 +58,10 @@ never shows up twice.
    .\gradlew :app:assembleDebug
    ```
 
-JDK 17+, Android SDK with NDK (the JNI bridge compiles C/C++ against the
-fbclient API), minSdk 26.
+JDK 25 (Gradle's daemon JVM criteria downloads it on first use), Android SDK
+with platform 37, build-tools 36.0.0 and NDK 28.2.13676358 (cmake 3.22.1),
+minSdk 26. The `android-build` workflow runs the same three steps on Linux
+and uploads `app-debug.apk` as an artifact.
 
 ## Testing
 
