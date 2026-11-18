@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 activity = this,
                 autoPath = intent?.getStringExtra(EXTRA_CATALOG),
                 autoMode = intent?.getStringExtra(EXTRA_MODE) ?: MODE_AUTO,
+                autoSearch = intent?.getStringExtra(EXTRA_SEARCH),
             )
         }
     }
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_CATALOG = "vvv.catalog"
         const val EXTRA_MODE = "vvv.mode"
+        const val EXTRA_SEARCH = "vvv.search"
         const val MODE_AUTO = "auto"
         const val MODE_COPY = "copy"
         const val MODE_INPLACE = "inplace"
@@ -156,6 +158,9 @@ private fun pathFromUri(context: Context, uri: Uri): String? {
     }
 }
 
+/** Maximum number of search hits shown; the UI says when it is truncated. */
+private const val SEARCH_LIMIT = 500
+
 private fun formatSize(bytes: Long): String = when {
     bytes >= 1L shl 30 -> "%.1f GB".format(bytes / (1L shl 30).toDouble())
     bytes >= 1L shl 20 -> "%.0f MB".format(bytes / (1L shl 20).toDouble())
@@ -191,7 +196,12 @@ private fun copyWithProgress(
 }
 
 @Composable
-private fun App(activity: Activity, autoPath: String?, autoMode: String) {
+private fun App(
+    activity: Activity,
+    autoPath: String?,
+    autoMode: String,
+    autoSearch: String? = null,
+) {
     var hasAllFiles by remember { mutableStateOf(hasStorageAccess(activity)) }
     var dbPath by remember { mutableStateOf("") }
     var handle by remember { mutableStateOf<Long?>(null) }
@@ -211,6 +221,13 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
     var entries by remember { mutableStateOf<List<CatalogDb.Entry>>(emptyList()) }
     var entriesLoading by remember { mutableStateOf(false) }
     var fileInfo by remember { mutableStateOf<CatalogDb.Entry?>(null) }
+
+    // search state: [searchQuery] is the term whose results are on screen
+    var searchText by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf<String?>(null) }
+    var searchHits by remember { mutableStateOf<List<CatalogDb.SearchHit>>(emptyList()) }
+    var searchLoading by remember { mutableStateOf(false) }
+    var searchHitInfo by remember { mutableStateOf<CatalogDb.SearchHit?>(null) }
 
     // Re-check the permission whenever the app comes back to the foreground:
     // the Settings screens are launched with plain startActivity (no result),
@@ -249,6 +266,9 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
         crumbs = emptyList()
         entries = emptyList()
         fileInfo = null
+        searchQuery = null
+        searchHits = emptyList()
+        searchHitInfo = null
     }
 
     /** Closes the catalog; a private copy is deleted. Returns true if removed. */
@@ -378,11 +398,15 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
     // One-shot auto-open for scripts: the activity is recreated on rotation,
     // so remember that the launch intent has already been consumed.
     var autoConsumed by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(autoPath, autoMode) {
+    LaunchedEffect(autoPath, autoMode, autoSearch) {
         if (!autoPath.isNullOrBlank() && !autoConsumed) {
             autoConsumed = true
             dbPath = autoPath
             startOpen(autoPath, autoMode)
+            if (!autoSearch.isNullOrBlank()) {
+                searchText = autoSearch
+                searchQuery = autoSearch
+            }
         }
     }
 
@@ -411,8 +435,30 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
         if (loaded != null) entries = loaded
     }
 
-    BackHandler(enabled = crumbs.isNotEmpty()) {
-        crumbs = crumbs.dropLast(1)
+    // Search runs off the UI thread; [searchQuery] doubles as the trigger and
+    // as the term shown in the results header.
+    LaunchedEffect(handle, searchQuery) {
+        val h = handle
+        val q = searchQuery
+        if (h == null || q == null) {
+            searchHits = emptyList()
+            return@LaunchedEffect
+        }
+        searchLoading = true
+        searchHits = emptyList()
+        val found = try {
+            withContext(Dispatchers.IO) { CatalogDb.search(h, q, SEARCH_LIMIT) }
+        } catch (e: Throwable) {
+            activity.runOnUiThread { status = "Search failed: ${e.message}" }
+            null
+        }
+        searchLoading = false
+        if (found != null) searchHits = found
+    }
+
+    BackHandler(enabled = crumbs.isNotEmpty() || searchQuery != null) {
+        if (crumbs.isNotEmpty()) crumbs = crumbs.dropLast(1)
+        else searchQuery = null
     }
 
     MaterialTheme {
@@ -489,41 +535,123 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
                 Text(status)
 
                 if (handle != null) {
-                    Text(
-                        "Tap a volume to browse it.",
-                        fontSize = 12.sp,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = searchText,
+                            onValueChange = { searchText = it },
+                            label = { Text("Search file names") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Button(
+                            enabled = searchText.isNotBlank() && !searchLoading,
+                            onClick = { searchQuery = searchText.trim() },
+                        ) { Text("Search") }
+                    }
                 }
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(volumes) { v ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                val h = handle ?: return@clickable
-                                try {
-                                    val rootId = CatalogDb.rootPathId(h, v.id)
-                                    crumbs = listOf(Crumb.Volume(v.id, rootId, v.name))
-                                } catch (e: Throwable) {
-                                    status = "Cannot open volume: ${e.message}"
-                                }
-                            }
+                if (searchQuery != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { searchQuery = null }) { Text("← Back") }
+                        Spacer(Modifier.weight(1f))
+                        if (!searchLoading) {
+                            Text("${searchHits.size} matches", fontSize = 12.sp)
+                        }
+                    }
+                    Text(
+                        "Results for \"$searchQuery\"",
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    )
+                    if (searchLoading) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else if (searchHits.isEmpty()) {
+                        Text("No file name contains this text in any volume.")
+                    } else {
+                        Text(
+                            if (searchHits.size >= SEARCH_LIMIT)
+                                "All volumes — showing the first $SEARCH_LIMIT matches."
+                            else "All volumes.",
+                            fontSize = 12.sp,
+                        )
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(v.name, fontWeight = FontWeight.Bold)
-                                v.physicalPath?.let { Text(it, fontSize = 13.sp) }
-                                val meta = buildString {
-                                    v.catalogDate?.let { append("cataloged $it") }
-                                    if (!v.lastUpdateDate.isNullOrBlank()) {
-                                        if (isNotEmpty()) append(" · ")
-                                        append("updated " + v.lastUpdateDate)
+                            items(searchHits, key = { it.id }) { hit ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .clickable { searchHitInfo = hit },
+                                ) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(
+                                            "📄  " + hit.name,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            buildString {
+                                                append(hit.volumeName.ifBlank { "volume" })
+                                                if (hit.folderPath.isNotBlank()) {
+                                                    append(" / " + hit.folderPath)
+                                                }
+                                            },
+                                            fontSize = 12.sp,
+                                        )
+                                        val meta = buildString {
+                                            hit.size?.let { append(formatSize(it)) }
+                                            hit.date?.takeIf { it.isNotBlank() }?.let {
+                                                if (isNotEmpty()) append(" · ")
+                                                append(it)
+                                            }
+                                        }
+                                        if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
                                     }
                                 }
-                                if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
-                                v.description?.takeIf { it.isNotBlank() }?.let {
-                                    Text(it, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                } else {
+                    if (handle != null) {
+                        Text(
+                            "Tap a volume to browse it.",
+                            fontSize = 12.sp,
+                        )
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(volumes) { v ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    val h = handle ?: return@clickable
+                                    try {
+                                        val rootId = CatalogDb.rootPathId(h, v.id)
+                                        searchQuery = null
+                                        searchText = ""
+                                        crumbs = listOf(Crumb.Volume(v.id, rootId, v.name))
+                                    } catch (e: Throwable) {
+                                        status = "Cannot open volume: ${e.message}"
+                                    }
+                                }
+                            ) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text(v.name, fontWeight = FontWeight.Bold)
+                                    v.physicalPath?.let { Text(it, fontSize = 13.sp) }
+                                    val meta = buildString {
+                                        v.catalogDate?.let { append("cataloged $it") }
+                                        if (!v.lastUpdateDate.isNullOrBlank()) {
+                                            if (isNotEmpty()) append(" · ")
+                                            append("updated " + v.lastUpdateDate)
+                                        }
+                                    }
+                                    if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp)
+                                    v.description?.takeIf { it.isNotBlank() }?.let {
+                                        Text(it, fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
@@ -649,6 +777,29 @@ private fun App(activity: Activity, autoPath: String?, autoMode: String) {
                         rwPromptPath = null
                         status = "Open cancelled."
                     }) { Text("Cancel") }
+                },
+            )
+        }
+
+        searchHitInfo?.let { f ->
+            AlertDialog(
+                onDismissRequest = { searchHitInfo = null },
+                title = { Text(f.name) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        f.size?.let { Text("Size: ${formatSize(it)}") }
+                        f.date?.takeIf { it.isNotBlank() }?.let { Text("Modified: $it") }
+                        f.ext?.let { Text("Extension: $it") }
+                        Text(
+                            "Path: " + listOf(f.volumeName, f.folderPath)
+                                .filter { it.isNotBlank() }
+                                .joinToString(" / ") + " / " + f.name,
+                            fontSize = 12.sp,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { searchHitInfo = null }) { Text("Close") }
                 },
             )
         }

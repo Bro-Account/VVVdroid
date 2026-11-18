@@ -94,6 +94,20 @@ object CatalogDb {
             )
         }
 
+    /** One path row, used to rebuild display paths for search results. */
+    data class PathNode(val volumeId: Long, val name: String, val fatherId: Long?)
+
+    /** One file found by [search]. */
+    data class SearchHit(
+        val id: Long,
+        val name: String,
+        val size: Long?,
+        val date: String?,
+        val ext: String?,
+        val volumeName: String,
+        val folderPath: String,
+    )
+
     private external fun nativeQuery(handle: Long, sql: String): Array<Array<String?>>
 
     /** Generic string query (see nativeQuery); SQL is built only from ids. */
@@ -140,5 +154,74 @@ object CatalogDb {
             )
         }
         return folders + files
+    }
+
+    /**
+     * All PATHS rows keyed by id. Loaded once per search: 4k paths for the
+     * test catalog, cheap compared to the result query.
+     */
+    private fun pathIndex(handle: Long): Map<Long, PathNode> =
+        query(
+            handle,
+            "SELECT CAST(PATH_ID AS VARCHAR(20)), CAST(VOLUME_ID AS VARCHAR(20)), " +
+                    "CAST(PATH_NAME AS VARCHAR(1000)), CAST(FATHER_ID AS VARCHAR(20)) " +
+                    "FROM PATHS"
+        ).associate { row ->
+            row[0]!!.toLong() to PathNode(
+                volumeId = row[1]!!.toLong(),
+                name = row[2].orEmpty(),
+                fatherId = row[3]?.toLongOrNull(),
+            )
+        }
+
+    /** "folder / subfolder" for a path id, without the volume root. */
+    private fun folderPath(index: Map<Long, PathNode>, pathId: Long): String {
+        val parts = ArrayDeque<String>()
+        var node = index[pathId]
+        var guard = 0
+        while (node != null && guard++ < 1024) {
+            if (node.name.isNotBlank()) parts.addFirst(node.name)
+            node = node.fatherId?.let(index::get)
+        }
+        return parts.joinToString(" / ")
+    }
+
+    /**
+     * File-name search across all volumes. [term] is inserted as a SQL string
+     * literal (single quotes doubled), never concatenated unescaped.
+     * Returns at most [limit] hits; callers show a "first N" hint.
+     */
+    fun search(handle: Long, term: String, limit: Int = 500): List<SearchHit> {
+        val needle = term.trim().take(200)
+        if (needle.isEmpty()) return emptyList()
+        val escaped = needle.replace("'", "''")
+
+        val rows = query(
+            handle,
+            "SELECT FIRST $limit CAST(FILE_ID AS VARCHAR(20)), " +
+                    "CAST(FILE_NAME AS VARCHAR(1000)), CAST(FILE_SIZE AS VARCHAR(20)), " +
+                    "CAST(FILE_DATETIME AS VARCHAR(32)), FILE_EXT, CAST(PATH_ID AS VARCHAR(20)) " +
+                    "FROM FILES WHERE PATH_FILE_ID IS NULL " +
+                    "AND UPPER(FILE_NAME) CONTAINING UPPER('$escaped') " +
+                    "ORDER BY UPPER(FILE_NAME)"
+        )
+        if (rows.isEmpty()) return emptyList()
+
+        val paths = pathIndex(handle)
+        val volumeNames = volumes(handle).associate { it.id to it.name }
+
+        return rows.map { row ->
+            val pathId = row[5]!!.toLong()
+            val node = paths[pathId]
+            SearchHit(
+                id = row[0]!!.toLong(),
+                name = row[1].orEmpty(),
+                size = row[2]?.toLongOrNull(),
+                date = row[3]?.take(19),
+                ext = row[4]?.takeIf { it.isNotBlank() },
+                volumeName = node?.let { volumeNames[it.volumeId] }.orEmpty(),
+                folderPath = folderPath(paths, pathId),
+            )
+        }
     }
 }

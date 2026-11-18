@@ -28,6 +28,8 @@ companion to the desktop app
   copy, and an unclean exit is cleaned up on the next start.
 - Browses one hierarchy level per screen (volumes → folders → files, like
   KeePassDroid): no desktop-style tree, system back returns one level.
+- Searches file names case-insensitively across all volumes (first 500 hits)
+  and shows the volume and folder path of every result.
 - Uses the official Firebird 5 Android build
   (`Firebird-5.0.4.1812-0-android-embedded.aar` from the FirebirdSQL
   releases) via a thin JNI bridge.
@@ -35,8 +37,8 @@ companion to the desktop app
 ## Status
 
 Working prototype: open a catalog (in place or as a private copy), list
-volumes, browse folders and files, show file info. Planned next: search by
-name/extension over the whole catalog.
+volumes, browse folders and files, show file info, search file names across
+all volumes. Planned next: catalog Android storage into a volume.
 
 Folder listings come from the `PATHS` tree (`VOLUME_ID` + `FATHER_ID`) and
 the files attached to that path (`FILES.PATH_ID`); a folder's own `FILES`
@@ -70,7 +72,8 @@ The app accepts launch extras, which makes device/emulator cycles scriptable:
 ```powershell
 adb shell am start -n com.vvvdroid.app/.MainActivity `
     -e vvv.catalog /sdcard/Download/_AndroidTest_ro.vvv `
-    -e vvv.mode auto      # auto | copy | inplace
+    -e vvv.mode auto `      # auto | copy | inplace
+    -e vvv.search windows   # optional: run a search after opening
 ```
 
 `auto` asks when the catalog is read-write, `copy` always opens a private
