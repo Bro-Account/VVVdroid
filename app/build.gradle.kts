@@ -25,8 +25,11 @@ android {
         applicationId = "com.vvvdroid.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.5.4"
+        // Development builds use a -dev suffix; the release tag must equal the
+        // versionName without it (release.yml checks this). Bump versionCode
+        // for every build handed out, and keep it clear of the release code.
+        versionCode = 13
+        versionName = "0.6-dev-1"
 
         ndk {
             // matches the ABIs we link libfbclient.so for; the AAR ships all four

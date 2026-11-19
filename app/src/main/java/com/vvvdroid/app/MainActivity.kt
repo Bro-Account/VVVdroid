@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.system.Os
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -204,17 +205,36 @@ private fun pathFromUri(context: Context, uri: Uri): String? {
     return candidates.firstOrNull { File(it).isFile }
 }
 
-/** Real file behind [uri], if it has one: `file://` paths and `content://`
- *  URIs whose provider exposes a document id on primary storage. Null means
- *  the provider only hands out a stream (sync/cloud apps) or the file is not
- *  reachable (no "All files access"), so the caller copies it instead. */
+/** Real file behind [uri], if it has one: `file://` paths, `content://`
+ *  document ids, and (as a last resort) the target path of the provider's
+ *  file descriptor. Null means the provider only hands out a stream
+ *  (cloud/pipe sources) or the file is not reachable. */
 private fun localPathFor(context: Context, uri: Uri): String? {
     val path = when (uri.scheme) {
         "file" -> uri.path
-        "content" -> pathFromUri(context, uri)
+        "content" -> pathFromUri(context, uri) ?: pathFromDescriptor(context, uri)
         else -> null
     } ?: return null
     return path.takeIf { File(it).isFile }
+}
+
+/** Recovers the underlying file of a local provider (FileProvider, media
+ *  provider, file managers) from the descriptor it hands out: the target of
+ *  `/proc/self/fd/<n>` is the real path. Pipes and sockets have no target. */
+private fun pathFromDescriptor(context: Context, uri: Uri): String? {
+    val pfd = try {
+        context.contentResolver.openFileDescriptor(uri, "r")
+    } catch (_: Exception) {
+        null
+    } ?: return null
+    return pfd.use {
+        val target = try {
+            Os.readlink("/proc/self/fd/${it.fd}")
+        } catch (_: Exception) {
+            null
+        }
+        target?.removeSuffix(" (deleted)")?.takeIf { path -> File(path).isFile }
+    }
 }
 
 /** Maximum number of search hits shown; the UI says when it is truncated. */
