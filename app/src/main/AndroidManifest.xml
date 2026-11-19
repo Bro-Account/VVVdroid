@@ -31,25 +31,30 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Open a catalog from a file manager ("Open with"). Real paths
-                 (file://, or content:// from the externalstorage provider) are
-                 opened where they are; providers that only hand out a stream
-                 (sync/cloud apps) are copied into app storage first. -->
+            <!-- Path-based filter for known extensions. The "*/*" type is
+                 essential: an intent that carries a MIME type (unknown files
+                 are usually sent as application/octet-stream) does not match
+                 a filter without one, even when the path pattern matches. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.vvv" />
-                <data android:scheme="content" android:host="*" android:pathPattern=".*\\.vvv" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.vvv" />
             </intent-filter>
 
             <!-- Many file managers and sync apps report .vvv as generic binary
-                 data without the extension in the provider path. -->
+                 data without the extension in the provider path. No scheme on
+                 purpose: both file:// and content:// intents carry it. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="content" android:mimeType="application/octet-stream" />
-                <data android:scheme="content" android:mimeType="application/x-vvv-catalog" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-vvv-catalog" />
             </intent-filter>
         </activity>
     </application>
