@@ -39,7 +39,11 @@ object CatalogDb {
     /** Returns all volumes; each row = [id, name, description, physicalPath, catalogDate, lastUpdateDate]. */
     external fun listVolumes(handle: Long): Array<Array<String?>>
 
-    /** Returns the DB_VERSION of the catalog (VVV 2.0 currently: "23"). */
+    /**
+     * Returns the DB_VERSION of the catalog: 23-24 (both readable; the
+     * desktop upgrades 23 -> 24). The app displays whatever it finds and
+     * never enforces a fixed number.
+     */
     external fun dbVersion(handle: Long): String
 
     /**

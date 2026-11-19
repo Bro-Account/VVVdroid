@@ -229,7 +229,9 @@ Java_com_vvvdroid_app_CatalogDb_openCatalog(JNIEnv* env, jclass, jstring jDbPath
 }
 
 // ---------------------------------------------------------------------------
-// dbVersion(handle) -> "24" (ODS 13 schema version)
+// dbVersion(handle) -> e.g. "23" or "24" (ODS 13 schema versions; both are
+// readable - the desktop upgrades 23 -> 24. The app reports whatever the
+// catalog stores and never enforces a fixed number.)
 // ---------------------------------------------------------------------------
 JNIEXPORT jstring JNICALL
 Java_com_vvvdroid_app_CatalogDb_dbVersion(JNIEnv* env, jclass, jlong jHandle) {
