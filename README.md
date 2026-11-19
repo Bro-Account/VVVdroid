@@ -14,6 +14,10 @@ companion to the desktop app
 - Opens the catalog files in place, wherever they are stored (e.g. in a
   synced folder) — multi-GB catalogs are never copied into app storage
   unless you ask for a copy.
+- Opens a `.vvv` from any file manager ("Open with"). A source that exposes
+  a real path (including the synced folder itself) opens in place; a provider
+  that only hands out a stream (some sync/cloud apps) is copied into app
+  storage for the session, because Firebird needs a real file.
 - **Read-only guarantee:** Firebird has no per-connection read-only attach —
   even a read-only transaction lets the engine update the header page and the
   transaction inventory on attach. A database is provably immutable only when
