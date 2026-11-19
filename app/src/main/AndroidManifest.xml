@@ -39,8 +39,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" android:pathPattern=".*\\.vvv" />
-                <data android:scheme="content" android:pathPattern=".*\\.vvv" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.vvv" />
+                <data android:scheme="content" android:host="*" android:pathPattern=".*\\.vvv" />
             </intent-filter>
 
             <!-- Many file managers and sync apps report .vvv as generic binary

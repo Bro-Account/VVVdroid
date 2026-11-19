@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -110,6 +111,10 @@ private sealed class Crumb(val title: String) {
     class Folder(val volumeId: Long, val id: Long, title: String) : Crumb(title)
 }
 
+/** A catalog a provider exposes only as a stream (no resolvable path); it has
+ *  to be copied into app storage before Firebird can open it. */
+private class StreamSource(val uri: Uri, val name: String, val size: Long?)
+
 /** Whether the app may read arbitrary files on shared storage. */
 private fun hasStorageAccess(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -170,21 +175,33 @@ private fun ensureFirebirdHome(context: Context): String {
     return dst.absolutePath
 }
 
-/** Resolves the real filesystem path behind a content:// URI for the
- *  common local storage providers (DocumentsUI / externalstorage). */
+/** Best-effort mapping of a content:// URI to a real file for local
+ *  providers. Handles DocumentsUI/externalstorage ("primary:…", "home:…"),
+ *  SD-card volume ids ("1234-ABCD:…"), absolute document ids, and relative
+ *  ids under primary storage (some sync apps expose their folder that way).
+ *  Null means the provider only hands out a stream. */
 private fun pathFromUri(context: Context, uri: Uri): String? {
-    return try {
-        val docId = DocumentsContract.getDocumentId(uri) ?: return null
-        val parts = docId.split(":", limit = 2)
-        if (parts.size != 2) return null
-        when (parts[0]) {
-            "primary" -> "/storage/emulated/0/${parts[1]}"
-            "home" -> "/storage/emulated/0/${parts[1]}"
-            else -> null // external SD cards etc.: keep manual entry for now
-        }
+    val docId = try {
+        DocumentsContract.getDocumentId(uri)
     } catch (_: Exception) {
         null
+    } ?: return null
+
+    val primary = Environment.getExternalStorageDirectory()
+    val candidates = mutableListOf<String>()
+    when {
+        docId.startsWith("/") -> candidates += docId
+        docId.startsWith("raw:") -> candidates += docId.removePrefix("raw:")
+        docId.startsWith("primary:") || docId.startsWith("home:") ->
+            candidates += File(primary, docId.substringAfter(':')).path
+        docId.matches(Regex("^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}:.*")) ->
+            candidates += "/storage/${docId.substringBefore(':')}/${docId.substringAfter(':')}"
+        else -> {
+            candidates += File(primary, docId).path
+            candidates += docId
+        }
     }
+    return candidates.firstOrNull { File(it).isFile }
 }
 
 /** Real file behind [uri], if it has one: `file://` paths and `content://`
@@ -304,6 +321,8 @@ private fun App(
 
     // read-write catalog waiting for the user's decision
     var rwPromptPath by remember { mutableStateOf<String?>(null) }
+    // provider stream waiting for the user's consent to be copied
+    var streamPrompt by remember { mutableStateOf<StreamSource?>(null) }
     var copying by remember { mutableStateOf(false) }
     // 0..100 while copying a file; -1 when the source reports no size
     var copyPercent by remember { mutableStateOf(0) }
@@ -381,6 +400,7 @@ private fun App(
         handle?.let { h -> try { CatalogDb.closeCatalog(h) } catch (_: Throwable) {} }
         handle = null
         volumes = emptyList()
+        streamPrompt = null
 
         val copy = openCopyPath
         if (copy != null) {
@@ -567,6 +587,18 @@ private fun App(
         rwPromptPath = path
     }
 
+    /** Asks before copying a provider stream: a big catalog must not quietly
+     *  fill app storage, and the user should know the view is a snapshot. */
+    fun requestStreamCopy(uri: Uri) {
+        if (copying) {
+            status = "A copy is still in progress — please wait."
+            return
+        }
+        val name = displayName(activity, uri) ?: uri.lastPathSegment ?: "catalog"
+        Log.i("VVVdroid", "stream source (no file path): $uri")
+        streamPrompt = StreamSource(uri, name, contentSize(activity, uri))
+    }
+
     /** Opens a `file://`/`content://` catalog: in place when the URI maps to a
      *  real file, as a private stream copy otherwise. */
     fun openIncoming(uri: Uri) {
@@ -588,7 +620,7 @@ private fun App(
             status = "Cannot read $name — grant \"All files access\" to open " +
                     "catalogs where they are stored."
         } else {
-            beginStreamCopy(uri)
+            requestStreamCopy(uri)
         }
     }
 
@@ -601,9 +633,9 @@ private fun App(
                 dbPath = resolved
                 status = "Catalog selected: $resolved"
             } else {
-                // Cloud/sync providers expose a stream only: copy it into app
-                // storage (the copy is deleted when the catalog is closed).
-                beginStreamCopy(uri)
+                // Cloud/sync providers expose a stream only: ask before
+                // copying it into app storage.
+                requestStreamCopy(uri)
             }
         }
     }
@@ -1052,6 +1084,52 @@ private fun App(
                     dismissButton = {
                         TextButton(onClick = {
                             rwPromptPath = null
+                            status = "Open cancelled."
+                        }) { Text("Cancel") }
+                    },
+                )
+            }
+
+            streamPrompt?.let { src ->
+                val dest = File(File(activity.filesDir, "catalogs"), "private-copy.vvv")
+                val free = dest.parentFile?.usableSpace
+                AlertDialog(
+                    onDismissRequest = {
+                        streamPrompt = null
+                        status = "Open cancelled."
+                    },
+                    title = { Text("Copy this catalog?") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "This app hands the file over as a stream, not as a " +
+                                        "file path. Firebird can only open real files, so " +
+                                        "VVVdroid has to copy it into app storage first."
+                            )
+                            Text(src.name, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                src.size?.let { "Size: ${formatSize(it)}" }
+                                    ?: "Size: unknown"
+                            )
+                            if (free != null) {
+                                Text("Free space in app storage: ${formatSize(free)}")
+                            }
+                            Text(
+                                "The copy is deleted when you close the catalog; the " +
+                                        "original stays untouched.",
+                                fontSize = 12.sp,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            streamPrompt = null
+                            beginStreamCopy(src.uri)
+                        }) { Text("Copy & open") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            streamPrompt = null
                             status = "Open cancelled."
                         }) { Text("Cancel") }
                     },
